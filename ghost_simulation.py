@@ -19,8 +19,8 @@ class PatientBed:
         self.fluid = random.randint(50, 100)
         
         # New Vitals: BP and Temp
-        self.bp_sys = random.randint(110, 130) # Systolic (Top number)
-        self.bp_dia = random.randint(70, 85)   # Diastolic (Bottom number)
+        self.bp_sys = random.randint(110, 130) # Systolic
+        self.bp_dia = random.randint(70, 85)   # Diastolic
         self.temp = random.uniform(36.5, 37.2) # Celsius
         
         # Unique Flow Rate (0.5% to 2.0% per tick)
@@ -102,10 +102,11 @@ except Exception as e:
     print(f"❌ Connection Failed: {e}")
     exit()
 
-# --- INITIALIZE 50 BEDS ---
-beds = [PatientBed(f"BED-{i:03d}") for i in range(1, 51)]
+# --- INITIALIZE 44 BEDS (7 to 50) ---
+# Modified range: Starts at 7, stops at 51 (so it includes 50)
+beds = [PatientBed(f"BED-{i:03d}") for i in range(7, 51)]
 
-print("🚀 Starting REALISTIC 50-Node Simulation...")
+print(f"🚀 Starting REALISTIC {len(beds)}-Node Simulation (Bed 007 - 050)...")
 
 # --- MAIN LOOP ---
 while True:
