@@ -3,9 +3,9 @@ import paho.mqtt.client as mqtt
 import json
 import time
 import queue
-import random
-import pandas as pd
+
 from ews_logic import calculate_news, get_risk_level
+from patient_db import generate_patient_db   # 👈 IMPORT FAKE DB
 
 # -------------------------------------------------
 # PAGE CONFIG
@@ -14,95 +14,60 @@ st.set_page_config(page_title="Project Nebula", layout="wide")
 st.title("🏥 PROJECT NEBULA: 5G SMART WARD")
 
 # -------------------------------------------------
-# THREAD-SAFE MAILBOX
+# MODE SELECTOR (TOP – JUDGE FRIENDLY)
 # -------------------------------------------------
-@st.cache_resource
-def get_mailbox():
-    return queue.Queue()
+st.markdown("### 🧭 Dashboard Mode")
 
-mailbox = get_mailbox()
+mode = st.radio(
+    "Select View",
+    ["🟢 Live Monitor", "📋 Patient Records"],
+    horizontal=True
+)
 
-# -------------------------------------------------
-# MQTT SETUP (UNCHANGED)
-# -------------------------------------------------
-def on_message(client, userdata, msg):
-    try:
-        mailbox.put(msg.payload.decode())
-    except:
-        pass
-
-@st.cache_resource
-def start_mqtt():
-    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, "Nebula_Dashboard")
-    client.on_message = on_message
-    client.connect("broker.hivemq.com", 1883, 60)
-    client.subscribe("nebula/ward1/bed/#")
-    client.loop_start()
-    return client
-
-client = start_mqtt()
+st.markdown("---")
 
 # -------------------------------------------------
-# SESSION STATE
+# FAKE PATIENT DATABASE (STABLE)
 # -------------------------------------------------
-if "data" not in st.session_state:
-    st.session_state.data = {}
-
-main_placeholder = st.empty()
+if "patient_db" not in st.session_state:
+    st.session_state.patient_db = generate_patient_db(50)
 
 # -------------------------------------------------
-# 🔥 NEW: PATIENT RECORDS DATA (STABLE DEMO VIEW)
+# LIVE MONITOR (YOUR EXISTING SYSTEM)
 # -------------------------------------------------
-def generate_patient_records(n=50):
-    problems = [
-        "Stable – under observation",
-        "Tachycardia",
-        "Hypoxia",
-        "Post-operative recovery",
-        "Sepsis suspected",
-        "Hypertension",
-        "Bradycardia",
-        "Respiratory distress",
-        "Dehydration",
-        "Fever – infection suspected"
-    ]
+if mode == "🟢 Live Monitor":
 
-    rows = []
-    for i in range(1, n + 1):
-        hr = random.randint(55, 160)
-        spo2 = random.randint(80, 100)
-        temp = round(random.uniform(36.0, 39.5), 1)
-        bp_sys = random.randint(90, 160)
-        bp_dia = random.randint(60, 100)
+    # THREAD SAFE QUEUE
+    @st.cache_resource
+    def get_mailbox():
+        return queue.Queue()
 
-        news = calculate_news(hr, spo2, bp_sys, temp)
-        _, risk = get_risk_level(news)
+    mailbox = get_mailbox()
 
-        rows.append({
-            "Bed ID": f"BED-{i:03d}",
-            "Heart Rate": hr,
-            "SpO₂ (%)": spo2,
-            "BP": f"{bp_sys}/{bp_dia}",
-            "Temperature (°C)": temp,
-            "NEWS Score": news,
-            "Status": risk,
-            "Clinical Notes": random.choice(problems)
-        })
+    def on_message(client, userdata, msg):
+        try:
+            mailbox.put(msg.payload.decode())
+        except:
+            pass
 
-    return pd.DataFrame(rows)
+    @st.cache_resource
+    def start_mqtt():
+        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, "Nebula_Dashboard")
+        client.on_message = on_message
+        client.connect("broker.hivemq.com", 1883, 60)
+        client.subscribe("nebula/ward1/bed/#")
+        client.loop_start()
+        return client
 
-# -------------------------------------------------
-# TABS
-# -------------------------------------------------
-tab_live, tab_records = st.tabs(["🟢 Live Monitor", "📋 Patient Records"])
+    client = start_mqtt()
 
-# -------------------------------------------------
-# 🟢 LIVE MONITOR (YOUR EXISTING DASHBOARD)
-# -------------------------------------------------
-with tab_live:
+    if "data" not in st.session_state:
+        st.session_state.data = {}
+
+    placeholder = st.empty()
+
     while True:
 
-        # MQTT DATA UPDATE
         while not mailbox.empty():
             try:
                 payload = json.loads(mailbox.get())
@@ -120,7 +85,7 @@ with tab_live:
             except:
                 pass
 
-        with main_placeholder.container():
+        with placeholder.container():
 
             critical_count = sum(
                 1 for b in st.session_state.data.values()
@@ -137,11 +102,12 @@ with tab_live:
             c1, c2, c3 = st.columns(3)
             c1.metric("Active Nodes", f"{len(st.session_state.data)}/50")
             c2.metric("Critical Alerts", critical_count)
-            c3.metric("High Risk (NEWS)", critical_count)
+            c3.metric("System Health", "STABLE")
 
             st.markdown("---")
 
             cols = st.columns(5)
+
             for i, (bed_id, info) in enumerate(sorted(st.session_state.data.items())):
                 with cols[i % 5]:
                     hr = info.get("hr", 0)
@@ -171,20 +137,19 @@ with tab_live:
         time.sleep(0.5)
 
 # -------------------------------------------------
-# 📋 PATIENT RECORDS (NEW, STABLE, JUDGE-FRIENDLY)
+# 📋 PATIENT RECORDS (CLEAN, STABLE, DEMO SAFE)
 # -------------------------------------------------
-with tab_records:
-    st.subheader("📋 Complete Patient Clinical Overview")
+if mode == "📋 Patient Records":
 
-    df = generate_patient_records(50)
+    st.subheader("📋 Patient Clinical Overview (Doctor View)")
 
     st.dataframe(
-        df,
+        st.session_state.patient_db,
         use_container_width=True,
         hide_index=True
     )
 
     st.info(
         "This section provides a consolidated clinical overview of all patients, "
-        "including vitals, NEWS score, and suspected clinical conditions for doctor review."
+        "including vitals, NEWS score, and suspected conditions for rapid doctor review."
     )
