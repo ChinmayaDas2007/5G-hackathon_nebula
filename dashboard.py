@@ -149,10 +149,13 @@ with placeholder.container():
 
             status = info.get("status", "NORMAL")
             badge_color = "red" if status == "CRITICAL" else "#2ecc71"
-
+            
+            last_seen = int(time.time() - info.get("timestamp", time.time()))
             # ---- ALERT LOGIC ----
             is_critical = (info.get("status") == "CRITICAL") or (risk_color == "RED")
             border = "2px solid red" if is_critical else "1px solid #444"
+            
+            
 
             # ---- BED CARD ----
             st.markdown(f"""
