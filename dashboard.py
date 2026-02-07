@@ -162,7 +162,7 @@ elif mode == "🟢 Live Monitor":
                 st.markdown(f"""
                 <div style="border:1px solid red; padding:10px; border-radius:5px; background:#2b0000; margin-bottom:5px;">
                     <b>{bed['id']}</b> | NEWS: {bed['news_score']}<br>
-                    HR: {bed['hr']} | SpO2: {bed['spo2']}%
+                    ❤️ HR: {bed['hr']} | 💨 SpO2: {bed['spo2']}% | 🩸 BP: {bed.get('bp', 'N/A')}
                 </div>
                 """, unsafe_allow_html=True)
             if not critical_beds:
@@ -191,6 +191,7 @@ elif mode == "🟢 Live Monitor":
                         <hr style="opacity:0.1; margin:5px 0;">
                         ❤️ HR: {bed['hr']}<br>
                         💨 SpO2: {bed['spo2']}%<br>
+                        🩸 BP: {bed.get('bp', 'N/A')}<br>
                         🌡️ Temp: {bed['temp']}°C
                     </div>
                     """, unsafe_allow_html=True)
