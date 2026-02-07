@@ -70,23 +70,39 @@ while True:
         except:
             pass
 
-    # 2. UPDATE UI
-    with placeholder.container():
-        # Quick Stats Header
-        c1, c2, c3 = st.columns(3)
-        total_beds = len(st.session_state.data)
-        critical_count = sum(1 for b in st.session_state.data.values() if b.get("status") == "CRITICAL")
-        
-        c1.metric("Connected Beds", f"{total_beds}/50")
-        c2.metric("CRITICAL ALERTS", f"{critical_count}")
-        c3.metric("System Status", "🟢 ONLINE")
-        
-        st.markdown("---")
+# -------------------------------------------------
+# DASHBOARD UI
+# -------------------------------------------------
+with placeholder.container():
 
-        # Bed Grid
-        cols = st.columns(5)
-        # Sort beds to keep layout stable (Bed-001, Bed-002...)
-        sorted_beds = sorted(st.session_state.data.items())
+    # ---------------- STATS ----------------
+    critical_count = sum(
+        1 for b in st.session_state.data.values()
+        if b.get("status") == "CRITICAL"
+    )
+
+    high_risk_count = sum(
+        1 for b in st.session_state.data.values()
+        if get_risk_level(
+            calculate_news(
+                b.get("hr", 0),
+                b.get("spo2", 98),
+                b.get("sys_bp", 120),
+                b.get("temp", 37.0)
+            )
+        )[0] == "RED"
+    )
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Active Nodes", f"{len(st.session_state.data)}/50")
+    c2.metric("CRITICAL ALERTS", critical_count)
+    c3.metric("HIGH RISK (NEWS)", high_risk_count)
+
+    st.markdown("---")
+
+    # ---------------- BED GRID ----------------
+    cols = st.columns(5)
+    sorted_beds = sorted(st.session_state.data.items())
 
         for i, (bed_id, info) in enumerate(sorted_beds):
             with cols[i % 5]:
