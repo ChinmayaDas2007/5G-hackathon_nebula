@@ -142,14 +142,47 @@ if mode == "🟢 Live Monitor":
 if mode == "📋 Patient Records":
 
     st.subheader("📋 Patient Clinical Overview (Doctor View)")
+    st.caption("All patients summarized for rapid clinical decision-making")
 
-    st.dataframe(
-        st.session_state.patient_db,
-        use_container_width=True,
-        hide_index=True
-    )
+    # Convert DataFrame to records
+    records = st.session_state.patient_db.to_dict("records")
 
-    st.info(
-        "This section provides a consolidated clinical overview of all patients, "
-        "including vitals, NEWS score, and suspected conditions for rapid doctor review."
-    )
+    cols = st.columns(4)   # 👈 4 BIG CARDS PER ROW (no tiny text)
+
+    for i, p in enumerate(records):
+        with cols[i % 4]:
+
+            status_color = {
+                "STABLE": "#2ecc71",
+                "MONITOR": "#f1c40f",
+                "CRITICAL": "#e74c3c"
+            }.get(p["Status"], "#999")
+
+            st.markdown(f"""
+            <div style="
+                border:2px solid {status_color};
+                background:#0e1117;
+                padding:16px;
+                border-radius:12px;
+                min-height:280px;
+            ">
+                <h4 style="margin-bottom:8px;">{p['Bed ID']}</h4>
+
+                ❤️ <b>HR:</b> {p['Heart Rate (bpm)']} bpm<br>
+                💨 <b>SpO₂:</b> {p['SpO₂ (%)']}%<br>
+                🩸 <b>BP:</b> {p['Blood Pressure']}<br>
+                🌡️ <b>Temp:</b> {p['Temperature (°C)']} °C<br>
+
+                <hr style="border:0.5px solid #333">
+
+                🧠 <b>NEWS:</b> {p['NEWS Score']}  
+                <span style="color:{status_color}; font-weight:bold;">
+                    ({p['Status']})
+                </span>
+
+                <hr style="border:0.5px solid #333">
+
+                📝 <b>Clinical Note:</b><br>
+                <i>{p['Clinical Notes']}</i>
+            </div>
+            """, unsafe_allow_html=True)
