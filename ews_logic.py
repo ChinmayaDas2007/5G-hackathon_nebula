@@ -1,7 +1,8 @@
 def calculate_news(hr, spo2, sys_bp, temp):
     score = 0
     
-    # --- 1. RESPIRATORY RATE (We assume normal for now if not tracking) ---
+    # the whole algorithm is based on the NEWS2 scoring system, but simplified for our vitals.
+    # --- 1. RESPIRATORY RATE (We assume normal for now if not tracking)(we will track it in the ICU mode) ---
     # (If you add RR later, add logic here)
 
     # --- 2. OXYGEN SATURATION (SpO2) ---
@@ -34,7 +35,7 @@ def calculate_news(hr, spo2, sys_bp, temp):
 
     return score
 
-def get_risk_level(score):
+"""def get_risk_level(score):
     if score >= 7:
         return "RED", "CRITICAL (NEWS: " + str(score) + ")"
     elif score >= 5:
@@ -42,4 +43,4 @@ def get_risk_level(score):
     elif score >= 1:
         return "YELLOW", "MONITOR (NEWS: " + str(score) + ")"
     else:
-        return "GREEN", "STABLE"
+        return "GREEN", "STABLE" """
