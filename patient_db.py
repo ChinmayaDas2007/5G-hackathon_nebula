@@ -16,7 +16,7 @@ def generate_patient_db(n=50):
         "Fever – infection suspected"
     ]
 
-    patients = []
+    rows = []
 
     for i in range(1, n + 1):
         hr = random.randint(55, 160)
@@ -26,17 +26,17 @@ def generate_patient_db(n=50):
         dia = random.randint(60, 100)
 
         news = calculate_news(hr, spo2, sys, temp)
-        _, risk = get_risk_level(news)
+        _, status = get_risk_level(news)
 
-        patients.append({
+        rows.append({
             "Bed ID": f"BED-{i:03d}",
             "Heart Rate (bpm)": hr,
             "SpO₂ (%)": spo2,
             "Blood Pressure": f"{sys}/{dia}",
             "Temperature (°C)": temp,
             "NEWS Score": news,
-            "Status": risk,
+            "Status": status,
             "Clinical Notes": random.choice(problems)
         })
 
-    return pd.DataFrame(patients)
+    return pd.DataFrame(rows)
