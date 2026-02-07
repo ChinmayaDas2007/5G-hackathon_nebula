@@ -122,37 +122,6 @@ with placeholder.container():
                 ⚠️ CRITICAL
             </div>
             """, unsafe_allow_html=True)
-
-    # tab_critical, tab_all = st.tabs(["🚨 CRITICAL", "🛏️ ALL BEDS"])
-
-    # with tab_critical:
-    #     critical_beds = {
-    #         bid: info for bid, info in st.session_state.data.items()
-    #         if info.get("status") == "CRITICAL"
-    #     }
-
-    #     if not critical_beds:
-    #         st.success("No critical patients right now.")
-    #     else:
-    #         cols = st.columns(2)
-    #         for i, (bed_id, info) in enumerate(critical_beds.items()):
-    #                 with cols[i % 2]:
-    #                     hr = info.get("hr", 0)
-    #                     spo2 = info.get("spo2", 98)
-
-    #                     st.markdown(f"""
-    #                     <div style="
-    #                         border:3px solid red;
-    #                         background:#330000;
-    #                         padding:16px;
-    #                         border-radius:10px;
-    #                     ">
-    #                         <strong>{bed_id}</strong><br>
-    #                         ❤️ HR: {hr} bpm<br>
-    #                         💨 SpO₂: {spo2}%<br>
-    #                         ⚠️ CRITICAL
-    #                     </div>
-    #                     """, unsafe_allow_html=True)
     
    
 
