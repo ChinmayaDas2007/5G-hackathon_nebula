@@ -45,7 +45,7 @@ def start_mqtt():
 client = start_mqtt()
 
 # -------------------------------------------------
-# SESSION STATE & PLACEHOLDERS
+# SESSION STATE & PLACEHOLDERS(last received data)
 # -------------------------------------------------
 if "data" not in st.session_state:
     st.session_state.data = {}
