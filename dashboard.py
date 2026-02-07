@@ -90,7 +90,7 @@ with placeholder.container():
     c1.metric("Active Nodes", f"{len(st.session_state.data)}/50")
     c2.metric("CRITICAL ALERTS", critical_count)
     c3.metric("HIGH RISK (NEWS)", high_risk_count)
-
+    
     st.markdown("---")
     
     # ---------------- SIDEBAR: CRITICAL ALERTS ----------------
@@ -143,17 +143,37 @@ with placeholder.container():
             news_score = calculate_news(hr, spo2, sys_bp, temp)
             risk_color, risk_label = get_risk_level(news_score)
 
+            # ---- COLOR LOGIC ----
+            hr_color = "red" if hr > 130 or hr < 50 else "lime"
+            spo2_color = "red" if spo2 < 90 else "lime"
+
+            status = info.get("status", "NORMAL")
+            badge_color = "red" if status == "CRITICAL" else "#2ecc71"
+
             # ---- ALERT LOGIC ----
             is_critical = (info.get("status") == "CRITICAL") or (risk_color == "RED")
             border = "2px solid red" if is_critical else "1px solid #444"
 
             # ---- BED CARD ----
             st.markdown(f"""
-            <div style="border:{border}; padding:8px; border-radius:6px; margin-bottom:6px;">
-                <strong>{bed_id}</strong><br>
-                ❤️ HR: {hr} bpm<br>
-                💨 SpO₂: {spo2}%<br>
-                🧠 NEWS: <b style="color:{risk_color};">{risk_label}</b>
+            <div style="border:{border}; padding:10px; border-radius:8px; margin-bottom:6px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <strong>{bed_id}</strong>
+                    <span style="
+                        background:{badge_color};
+                        color:white;
+                        padding:2px 6px;
+                        border-radius:4px;
+                        font-size:12px;
+                    ">
+                        {status}
+                    </span>
+                </div>
+                <br>
+                ❤️ HR: <span style="color:{hr_color}; font-weight:bold;">{hr} bpm</span><br>
+                💨 SpO₂: <span style="color:{spo2_color}; font-weight:bold;">{spo2}%</span><br>
+                🧠 NEWS: <b style="color:{risk_color};">{risk_label}</b><br>
+                🕒 Updated: {last_seen}s ago
             </div>
             """, unsafe_allow_html=True)
 
