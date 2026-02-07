@@ -12,7 +12,7 @@ st.set_page_config(page_title="Project Nebula", layout="wide")
 st.title("🏥 PROJECT NEBULA: 5G SMART WARD")
 
 # -------------------------------------------------
-# MQQT & DATA STORAGE
+# THREAD-SAFE MAILBOX
 # -------------------------------------------------
 @st.cache_resource
 def get_mailbox():
@@ -20,9 +20,9 @@ def get_mailbox():
 
 mailbox = get_mailbox()
 
-if "beds" not in st.session_state:
-    st.session_state.beds = {}
-
+# -------------------------------------------------
+# MQTT SETUP
+# -------------------------------------------------
 def on_message(client, userdata, msg):
     try:
         mailbox.put(msg.payload.decode())
@@ -31,105 +31,179 @@ def on_message(client, userdata, msg):
 
 @st.cache_resource
 def start_mqtt():
-    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, "Nebula_Final_Fix_v3")
-    client.on_message = on_message
-    client.connect("broker.hivemq.com", 1883, 60)
-    client.subscribe("nebula/ward1/bed/#")
-    client.loop_start()
-    return client
+    try:
+        # Unique ID to prevent conflicts
+        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, "Nebula_Dash_Final_Ultimate")
+        client.on_message = on_message
+        client.connect("broker.hivemq.com", 1883, 60)
+        client.subscribe("nebula/ward1/bed/#")
+        client.loop_start()
+        return client
+    except:
+        return None
 
 client = start_mqtt()
 
-# UI Placeholders
-sidebar_area = st.sidebar.empty()
-metrics_area = st.empty()
-grid_area = st.empty()
+# -------------------------------------------------
+# SESSION STATE & PLACEHOLDERS(last received data)
+# -------------------------------------------------
+if "data" not in st.session_state:
+    st.session_state.data = {}
+
+# ⚡ CRITICAL FIX: Create Placeholders ONCE (Outside the Loop)
+# This allows us to wipe/overwrite them every frame
+main_placeholder = st.empty()
+sidebar_placeholder = st.sidebar.empty()
 
 # -------------------------------------------------
-# MAIN LOOP
+# MAIN INFINITE LOOP
 # -------------------------------------------------
 while True:
-    now = time.time()
-
-    # 1. PROCESS ALL MESSAGES IN QUEUE
+    # 1. DRAIN THE MAILBOX (Update Data)
     while not mailbox.empty():
         try:
-            raw_msg = mailbox.get_nowait()
-            data = json.loads(raw_msg)
-            b_id = data['id']
+            payload = json.loads(mailbox.get())
+            bed_id = payload["id"]
             
-            # NEWS Scoring logic
-            sys_bp = int(data['bp'].split('/')[0]) if 'bp' in data else 120
-            n_score = calculate_news(data['hr'], data['spo2'], sys_bp, data['temp'])
-            r_color, r_label = get_risk_level(n_score)
-            
-            # Update data with fresh calculations
-            st.session_state.beds[b_id] = {
-                **data,
-                "news_score": n_score,
-                "risk_color": r_color,
-                "risk_label": r_label,
-                "is_critical": (n_score >= 7 or data.get('status') == "CRITICAL"),
-                "last_seen": now
-            }
+            # Helper: Parse Sys BP for NEWS calculation
+            if "bp" in payload and isinstance(payload["bp"], str):
+                try:
+                    payload["sys_bp"] = int(payload["bp"].split("/")[0])
+                except:
+                    payload["sys_bp"] = 120
+            else:
+                payload["sys_bp"] = 120
+
+            st.session_state.data[bed_id] = payload
         except:
-            continue
+            pass
 
-    # 2. CLEANUP STALE DATA (Remove beds inactive for > 7 seconds)
-    st.session_state.beds = {
-        k: v for k, v in st.session_state.beds.items() 
-        if now - v.get('last_seen', 0) < 7
-    }
-
-    # 3. SORT & FILTER (The "Real" Solution)
-    # Re-calculate these every loop so counts are ALWAYS accurate
-    all_active_beds = list(st.session_state.beds.values())
-    
-    # Sort by Score (High to Low)
-    sorted_beds = sorted(all_active_beds, key=lambda x: x['news_score'], reverse=True)
-    
-    # Critical List (Only truly critical ones)
-    critical_beds = [b for b in sorted_beds if b['is_critical']]
-
-    # 4. RENDER SIDEBAR
-    with sidebar_area.container():
-        st.header("🚨 Live Critical Alerts")
-        st.error(f"Total Critical: {len(critical_beds)}")
+    # 2. RENDER SIDEBAR (Wipes old content automatically)
+    with sidebar_placeholder.container():
+        st.header("🚨 CRITICAL PATIENTS")
         
-        for bed in critical_beds:
-            st.markdown(f"""
-            <div style="border:1px solid red; padding:10px; border-radius:5px; background:#2b0000; margin-bottom:5px;">
-                <b>{bed['id']}</b> | NEWS: {bed['news_score']}<br>
-                HR: {bed['hr']} | SpO2: {bed['spo2']}%
-            </div>
-            """, unsafe_allow_html=True)
+        # Filter Critical Patients
+        critical_beds = {}
+
+        for bid, info in st.session_state.data.items():
+            hr = info.get("hr", 0)
+            spo2 = info.get("spo2", 98)
+            sys_bp = info.get("sys_bp", 120)
+            temp = info.get("temp", 37.0)
+
+            news = calculate_news(hr, spo2, sys_bp, temp)
+            risk_color, _ = get_risk_level(news)
+
+            if info.get("status") == "CRITICAL" or risk_color == "RED":
+                critical_beds[bid] = info
+            
+            # Condition B: High NEWS Score
+            news = calculate_news(
+                info.get("hr", 0), info.get("spo2", 98), 
+                info.get("sys_bp", 120), info.get("temp", 37.0)
+            )
+            if get_risk_level(news)[0] == "RED":
+                critical_beds.append((bid, info))
+
         if not critical_beds:
-            st.success("No Critical Patients")
+            st.success("All Patients Stable")
+        else:
+            for bed_id, info in critical_beds:
+                # Extract Data
+                hr = info.get("hr", 0)
+                spo2 = info.get("spo2", 98)
+                bp = info.get("bp", "120/80")
+                temp = info.get("temp", 37.0)
 
-    # 5. RENDER MAIN DASHBOARD
-    with metrics_area.container():
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Total Active Beds", len(all_active_beds))
-        c2.metric("Critical Alerts", len(critical_beds))
-        c3.metric("System Health", "STABLE")
-        st.divider()
-
-    with grid_area.container():
-        cols = st.columns(4)
-        for i, bed in enumerate(sorted_beds):
-            with cols[i % 4]:
-                card_bg = "#330000" if bed['is_critical'] else "#0e1117"
-                card_border = "2px solid red" if bed['is_critical'] else "1px solid #444"
-                
                 st.markdown(f"""
-                <div style="border:{card_border}; background:{card_bg}; padding:15px; border-radius:10px; margin-bottom:10px;">
-                    <h3 style="margin:0;">{bed['id']}</h3>
-                    <p style="margin:5px 0;">Score: <b style="color:{bed['risk_color']}">{bed['news_score']} ({bed['risk_label']})</b></p>
-                    <hr style="opacity:0.2;">
-                    ❤️ HR: {bed['hr']}<br>
-                    💨 SpO2: {bed['spo2']}%<br>
-                    🌡️ Temp: {bed['temp']}°C
+                <div style="border:2px solid red; background:#330000; padding:10px; border-radius:8px; margin-bottom:8px;">
+                    <strong>{bed_id}</strong><br>
+                    ❤️ {hr} | 💨 {spo2}%<br>
+                    🩸 {bp} | 🌡️ {temp}°C<br>
+                    <b style="color:red; font-size:0.9em">⚠️ ACTION REQUIRED</b>
                 </div>
                 """, unsafe_allow_html=True)
 
-    time.sleep(1)
+    # 3. RENDER MAIN GRID
+    with main_placeholder.container():
+        
+        # --- TOP STATS ---
+        critical_count = len(critical_beds)
+        high_risk_count = sum(
+            1 for b in st.session_state.data.values()
+            if get_risk_level(calculate_news(
+                b.get("hr", 0), b.get("spo2", 98), b.get("sys_bp", 120), b.get("temp", 37.0)
+            ))[0] == "RED"
+        )
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Active Nodes", f"{len(st.session_state.data)}/50")
+        c2.metric("CRITICAL ALERTS", critical_count)
+        c3.metric("HIGH RISK (NEWS)", high_risk_count)
+        
+        st.markdown("---")
+
+        # --- BED GRID ---
+        cols = st.columns(5)
+        sorted_beds = sorted(st.session_state.data.items())
+
+        for i, (bed_id, info) in enumerate(sorted_beds):
+            with cols[i % 5]:
+                # Safe Data Extraction
+                hr = info.get("hr", 0)
+                spo2 = info.get("spo2", 98)
+                bp = info.get("bp", "120/80")     # Full string "120/80"
+                sys_bp = info.get("sys_bp", 120)  # Int 120
+                temp = info.get("temp", 37.0)
+                fluid = int(info.get("fluid", 0))
+                status = info.get("status", "NORMAL")
+                
+                # Logic
+                news_score = calculate_news(hr, spo2, sys_bp, temp)
+                risk_color, risk_label = get_risk_level(news_score)
+
+                # Color Coding
+                hr_color = "#ff4444" if (hr > 130 or hr < 50) else "#00ff00"
+                spo2_color = "#ff4444" if spo2 < 90 else "#00ff00"
+                badge_color = "#ff0000" if status == "CRITICAL" else "#2ecc71"
+                
+                # Last Seen (Live Check)
+                try:
+                    ts = info.get("timestamp", time.time())
+                    last_seen = int(time.time() - float(ts))
+                except:
+                    last_seen = 0
+
+                # Border Logic
+                is_critical = (status == "CRITICAL") or (risk_color == "RED")
+                border = "2px solid red" if is_critical else "1px solid #444"
+                bg = "#2a0a0a" if is_critical else "#0e1117"
+
+                # Render Card (NOW WITH ALL PARAMETERS)
+                st.markdown(f"""
+                <div style="border:{border}; background-color:{bg}; padding:10px; border-radius:8px; margin-bottom:6px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <strong>{bed_id}</strong>
+                        <span style="background:{badge_color}; color:white; padding:2px 6px; border-radius:4px; font-size:12px;">
+                            {status}
+                        </span>
+                    </div>
+                    <div style="margin-top:8px; font-size:0.9em; line-height:1.4;">
+                        ❤️ HR: <span style="color:{hr_color}; font-weight:bold;">{hr}</span><br>
+                        💨 SpO₂: <span style="color:{spo2_color}; font-weight:bold;">{spo2}%</span><br>
+                        🩸 BP: <b>{bp}</b><br>
+                        🌡️ Temp: <b>{temp}°C</b>
+                    </div>
+                    <div style="margin-top:6px; font-size:0.8em; color:#aaa; border-top:1px solid #444; padding-top:4px;">
+                         NEWS: <b style="color:{risk_color};">{risk_label}</b>
+                    </div>
+                    <div style="font-size:0.7em; color:#666; text-align:right;">
+                        🕒 {last_seen}s ago
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                st.progress(fluid)
+
+    # 4. CONTROL REFRESH RATE
+    time.sleep(0.5)
