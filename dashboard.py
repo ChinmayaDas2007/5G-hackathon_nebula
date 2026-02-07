@@ -154,69 +154,41 @@ with placeholder.container():
     #                     </div>
     #                     """, unsafe_allow_html=True)
     
-    with tab_all:
-        cols = st.columns(5)
-        sorted_beds = sorted(st.session_state.data.items())
+   
 
-        for i, (bed_id, info) in enumerate(sorted_beds):
-            with cols[i % 5]:
+    # ---------------- BED GRID ----------------
+    cols = st.columns(5)
+    sorted_beds = sorted(st.session_state.data.items())
 
-                hr = info.get("hr", 0)
-                spo2 = info.get("spo2", 98)
-                sys_bp = info.get("sys_bp", 120)
-                temp = info.get("temp", 37.0)
-                fluid = int(info.get("fluid", 0))
+    for i, (bed_id, info) in enumerate(sorted_beds):
+        with cols[i % 5]:
 
-                news_score = calculate_news(hr, spo2, sys_bp, temp)
-                risk_color, risk_label = get_risk_level(news_score)
+            # ---- SAFE DATA ----
+            hr = info.get("hr", 0)
+            spo2 = info.get("spo2", 98)
+            sys_bp = info.get("sys_bp", 120)
+            temp = info.get("temp", 37.0)
+            fluid = int(info.get("fluid", 0))
 
-                is_critical = (info.get("status") == "CRITICAL") or (risk_color == "RED")
-                border = "2px solid red" if is_critical else "1px solid #444"
+            # ---- NEWS SCORE ----
+            news_score = calculate_news(hr, spo2, sys_bp, temp)
+            risk_color, risk_label = get_risk_level(news_score)
 
-                st.markdown(f"""
-                <div style="border:{border}; padding:8px; border-radius:6px;">
-                    <strong>{bed_id}</strong><br>
-                    ❤️ HR: {hr} bpm<br>
-                    💨 SpO₂: {spo2}%<br>
-                    🧠 NEWS: <b style="color:{risk_color};">{risk_label}</b>
-                </div>
-                """, unsafe_allow_html=True)
+            # ---- ALERT LOGIC ----
+            is_critical = (info.get("status") == "CRITICAL") or (risk_color == "RED")
+            border = "2px solid red" if is_critical else "1px solid #444"
 
-                st.progress(fluid)
+            # ---- BED CARD ----
+            st.markdown(f"""
+            <div style="border:{border}; padding:8px; border-radius:6px; margin-bottom:6px;">
+                <strong>{bed_id}</strong><br>
+                ❤️ HR: {hr} bpm<br>
+                💨 SpO₂: {spo2}%<br>
+                🧠 NEWS: <b style="color:{risk_color};">{risk_label}</b>
+            </div>
+            """, unsafe_allow_html=True)
 
-    # # ---------------- BED GRID ----------------
-    # cols = st.columns(5)
-    # sorted_beds = sorted(st.session_state.data.items())
-
-    # for i, (bed_id, info) in enumerate(sorted_beds):
-    #     with cols[i % 5]:
-
-    #         # ---- SAFE DATA ----
-    #         hr = info.get("hr", 0)
-    #         spo2 = info.get("spo2", 98)
-    #         sys_bp = info.get("sys_bp", 120)
-    #         temp = info.get("temp", 37.0)
-    #         fluid = int(info.get("fluid", 0))
-
-    #         # ---- NEWS SCORE ----
-    #         news_score = calculate_news(hr, spo2, sys_bp, temp)
-    #         risk_color, risk_label = get_risk_level(news_score)
-
-    #         # ---- ALERT LOGIC ----
-    #         is_critical = (info.get("status") == "CRITICAL") or (risk_color == "RED")
-    #         border = "2px solid red" if is_critical else "1px solid #444"
-
-    #         # ---- BED CARD ----
-    #         st.markdown(f"""
-    #         <div style="border:{border}; padding:8px; border-radius:6px; margin-bottom:6px;">
-    #             <strong>{bed_id}</strong><br>
-    #             ❤️ HR: {hr} bpm<br>
-    #             💨 SpO₂: {spo2}%<br>
-    #             🧠 NEWS: <b style="color:{risk_color};">{risk_label}</b>
-    #         </div>
-    #         """, unsafe_allow_html=True)
-
-    #         st.progress(fluid)
+            st.progress(fluid)
 
 # -------------------------------------------------
 # CONTROLLED REFRESH (STREAMLIT-SAFE)
