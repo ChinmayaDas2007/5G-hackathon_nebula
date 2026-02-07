@@ -50,7 +50,7 @@ main_placeholder = st.empty()
 sidebar_placeholder = st.sidebar.empty()
 
 # -------------------------------------------------
-# MAIN LOOP (AS YOU WANT IT)
+# MAIN LOOP (AS YOU WANT)
 # -------------------------------------------------
 while True:
 
@@ -77,7 +77,8 @@ while True:
     with sidebar_placeholder.container():
         st.header("🚨 Live Critical Alerts")
 
-        critical_beds = []
+        # 🔥 FIX: DICT instead of LIST (NO DUPLICATES)
+        critical_beds = {}
 
         for bid, info in st.session_state.data.items():
             hr = info.get("hr", 0)
@@ -88,17 +89,17 @@ while True:
             news = calculate_news(hr, spo2, sys_bp, temp)
             risk_color, _ = get_risk_level(news)
 
-            # 🔴 FIX: SAME LOGIC AS GRID
             if info.get("status") == "CRITICAL" or risk_color == "RED":
-                critical_beds.append((bid, info))
+                critical_beds[bid] = info   # overwrite, no duplicate
 
         if not critical_beds:
             st.success("All Patients Stable")
         else:
-            st.markdown(f"**Total Critical:** {len(critical_beds)}")
-            for bed_id, info in critical_beds:
+            st.markdown(f"**Total Critical: {len(critical_beds)}**")
+            for bed_id, info in critical_beds.items():
                 st.markdown(f"""
-                <div style="border:2px solid red; background:#330000; padding:10px; border-radius:8px; margin-bottom:8px;">
+                <div style="border:2px solid red; background:#330000; padding:10px;
+                            border-radius:8px; margin-bottom:8px;">
                     <strong>{bed_id}</strong><br>
                     ❤️ HR: {info.get("hr", 0)}<br>
                     💨 SpO₂: {info.get("spo2", 98)}%<br>
@@ -148,7 +149,6 @@ while True:
 
                 hr_color = "red" if hr > 130 or hr < 50 else "lime"
                 spo2_color = "red" if spo2 < 90 else "lime"
-                badge_color = "red" if status == "CRITICAL" else "#2ecc71"
 
                 ts = info.get("timestamp", time.time())
                 last_seen = int(time.time() - float(ts))
@@ -158,7 +158,8 @@ while True:
                 bg = "#2a0a0a" if is_critical else "#0e1117"
 
                 st.markdown(f"""
-                <div style="border:{border}; background:{bg}; padding:10px; border-radius:8px; margin-bottom:6px;">
+                <div style="border:{border}; background:{bg};
+                            padding:10px; border-radius:8px; margin-bottom:6px;">
                     <strong>{bed_id}</strong><br>
                     ❤️ HR: <span style="color:{hr_color};">{hr}</span><br>
                     💨 SpO₂: <span style="color:{spo2_color};">{spo2}%</span><br>
