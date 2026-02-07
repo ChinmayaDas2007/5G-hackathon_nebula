@@ -158,31 +158,34 @@ if mode == "📋 Patient Records":
                 "CRITICAL": "#e74c3c"
             }.get(p["Status"], "#999")
 
-            st.markdown(f"""
-            <div style="
-                border:2px solid {status_color};
-                background:#0e1117;
-                padding:16px;
-                border-radius:12px;
-                min-height:280px;
-            ">
-                <h4 style="margin-bottom:8px;">{p['Bed ID']}</h4>
+            st.markdown(
+    f"""
+    <div style="
+        border:2px solid {status_color};
+        background:#0e1117;
+        padding:16px;
+        border-radius:12px;
+        min-height:280px;
+    ">
+        <h4>{p['Bed ID']}</h4>
 
-                ❤️ <b>HR:</b> {p['Heart Rate (bpm)']} bpm<br>
-                💨 <b>SpO₂:</b> {p['SpO₂ (%)']}%<br>
-                🩸 <b>BP:</b> {p['Blood Pressure']}<br>
-                🌡️ <b>Temp:</b> {p['Temperature (°C)']} °C<br>
+        ❤️ <b>HR:</b> {p['Heart Rate (bpm)']} bpm<br>
+        💨 <b>SpO₂:</b> {p['SpO₂ (%)']}%<br>
+        🩸 <b>BP:</b> {p['Blood Pressure']}<br>
+        🌡️ <b>Temp:</b> {p['Temperature (°C)']} °C<br>
 
-                <hr style="border:0.5px solid #333">
+        <hr style="border:0.5px solid #333">
 
-                🧠 <b>NEWS:</b> {p['NEWS Score']}  
-                <span style="color:{status_color}; font-weight:bold;">
-                    ({p['Status']})
-                </span>
+        🧠 <b>NEWS:</b> {p['NEWS Score']}
+        <span style="color:{status_color}; font-weight:bold;">
+            ({p['Status']})
+        </span>
 
-                <hr style="border:0.5px solid #333">
+        <hr style="border:0.5px solid #333">
 
-                📝 <b>Clinical Note:</b><br>
-                <i>{p['Clinical Notes']}</i>
-            </div>
-            """, unsafe_allow_html=True)
+        📝 <b>Clinical Note:</b><br>
+        <i>{p['Clinical Notes']}</i>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
