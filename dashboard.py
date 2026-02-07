@@ -186,3 +186,4 @@ with placeholder.container():
 # -------------------------------------------------
 # CONTROLLED REFRESH (STREAMLIT-SAFE)
 # -------------------------------------------------
+st.autorefresh()
