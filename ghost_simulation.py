@@ -13,11 +13,17 @@ TOPIC_BASE = "nebula/ward1/bed"
 class PatientBed:
     def __init__(self, bed_id):
         self.bed_id = bed_id
-        # Initial Vitals (Healthy-ish start)
+        # --- INITIAL VITALS (Healthy-ish start) ---
         self.hr = random.randint(60, 90)
         self.spo2 = random.randint(96, 100)
         self.fluid = random.randint(50, 100)
-        # Unique Flow Rate for this bed (0.5% to 2.0% per tick)
+        
+        # New Vitals: BP and Temp
+        self.bp_sys = random.randint(110, 130) # Systolic (Top number)
+        self.bp_dia = random.randint(70, 85)   # Diastolic (Bottom number)
+        self.temp = random.uniform(36.5, 37.2) # Celsius
+        
+        # Unique Flow Rate (0.5% to 2.0% per tick)
         self.flow_rate = random.uniform(0.5, 2.0)
         self.status = "NORMAL"
         self.critical_timer = 0
@@ -29,38 +35,59 @@ class PatientBed:
             self.fluid = 100 # Nurse changed the bag
         
         # 2. HEART RATE DRIFT (+- 2 bpm)
-        drift = random.randint(-2, 2)
-        self.hr += drift
-        # Keeing within human limits
+        self.hr += random.randint(-2, 2)
         self.hr = max(45, min(190, self.hr))
 
         # 3. SPO2 DRIFT (+- 1 %)
-        # SpO2 tends to stay stable
-        if random.random() < 0.3: # Only change 30% of the time 
+        if random.random() < 0.3: 
             self.spo2 += random.randint(-1, 1)
         self.spo2 = max(80, min(100, self.spo2))
 
-        # 4. CRITICAL EVENT LOGIC (Random Cardiac Arrest)
-        # 1% chance to enter critical state, lasts for 5 ticks
+        # 4. BLOOD PRESSURE DRIFT (+- 2 mmHg)
+        # as BP tends to fluctuate slightly
+        if random.random() < 0.5:
+            self.bp_sys += random.randint(-2, 2)
+            self.bp_dia += random.randint(-1, 1)
+        
+        # Keep BP in realistic limits
+        self.bp_sys = max(90, min(180, self.bp_sys))
+        self.bp_dia = max(60, min(110, self.bp_dia))
+
+        # 5. TEMP DRIFT (Very slow, +- 0.1 C)
+        if random.random() < 0.2: # Changes rarely
+            self.temp += random.uniform(-0.1, 0.1)
+        self.temp = max(33.0, min(40.0, self.temp))
+
+        # 6. CRITICAL EVENT LOGIC (Cardiac Arrest / Shock)
+        # 1% chance to enter critical state
         if self.status == "NORMAL" and random.random() < 0.01:
             self.status = "CRITICAL"
-            self.critical_timer = 5
-            # Force vitals to look bad instantly
-            self.hr = random.randint(140, 170) 
-            self.spo2 = random.randint(80, 88)
+            self.critical_timer = 8 # Lasts 8 seconds now
+            
+            # Force vitals to CRITICAL values
+            self.hr = random.randint(140, 170)  # Tachycardia
+            self.spo2 = random.randint(80, 88)  # Hypoxia
+            self.bp_sys = random.randint(70, 90)# Hypotension (Shock)
+            self.bp_dia = random.randint(40, 60)
         
         # Count down critical time
         if self.status == "CRITICAL":
             self.critical_timer -= 1
             if self.critical_timer <= 0:
+                # Recover to Normal
                 self.status = "NORMAL"
-                self.hr = random.randint(70, 90) # Recover
+                self.hr = random.randint(70, 90)
                 self.spo2 = 98
+                self.bp_sys = 120
+                self.bp_dia = 80
 
+        # --- PACKAGING DATA ---
         return {
             "id": self.bed_id,
             "hr": int(self.hr),
             "spo2": int(self.spo2),
+            "bp": f"{int(self.bp_sys)}/{int(self.bp_dia)}", # String format "120/80"
+            "temp": round(self.temp, 1), # Round to 1 decimal
             "fluid": int(self.fluid),
             "status": self.status,
             "timestamp": time.time()
