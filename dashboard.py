@@ -51,7 +51,6 @@ if "data" not in st.session_state:
     st.session_state.data = {}
 
 placeholder = st.empty()
-st.autorefresh(interval=1000, key="nebula_refresh")
 
 # -------------------------------------------------
 # PROCESS MQTT MESSAGES
@@ -186,4 +185,6 @@ with placeholder.container():
 # -------------------------------------------------
 # CONTROLLED REFRESH (STREAMLIT-SAFE)
 # -------------------------------------------------
-st.autorefresh()
+time.sleep(1)
+st.experimental_rerun()
+
