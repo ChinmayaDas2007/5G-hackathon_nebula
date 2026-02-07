@@ -3,6 +3,8 @@ import paho.mqtt.client as mqtt
 import json
 import time
 import queue
+from severity import calculate_news, get_risk_level
+
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Project Nebula", layout="wide")
@@ -47,7 +49,7 @@ if 'data' not in st.session_state:
 
 placeholder = st.empty()
 
-while True:
+if True:
     # Process all messages in the mailbox
     while not mailbox.empty():
         try:
@@ -62,10 +64,25 @@ while True:
     with placeholder.container():
         # Stats
         critical_count = sum(1 for b in st.session_state.data.values() if b['status'] == "CRITICAL")
+
+        high_risk_count = sum(
+            1 for b in st.session_state.data.values()
+            if get_risk_level(
+                calculate_news(
+                    b.get('hr', 0),
+                    b.get('spo2', 98),
+                    b.get('sys_bp', 120),
+                    b.get('temp', 37.0)
+                )
+            )[0] == "RED"
+        )
+
         
-        c1, c2 = st.columns(2)
+        c1, c2, c3 = st.columns(3)
         c1.metric("Active Nodes", f"{len(st.session_state.data)}/50")
         c2.metric("CRITICAL ALERTS", f"{critical_count}")
+        c3.metric("HIGH RISK (NEWS)", f"{high_risk_count}")
+
         st.markdown("---")
 
         # The Bed Grid
@@ -74,18 +91,34 @@ while True:
         
         for index, (bed_id, info) in enumerate(sorted_beds):
                     with cols[index % 5]:
+                        # --- SEVERITY / NEWS CALCULATION ---
+                        hr = info.get('hr', 0)
+                        spo2 = info.get('spo2', 98)
+
+                        # These may not exist yet, so we use safe defaults
+                        sys_bp = info.get('sys_bp', 120)
+                        temp = info.get('temp', 37.0)
+
+                        news_score = calculate_news(hr, spo2, sys_bp, temp)
+                        risk_color, risk_label = get_risk_level(news_score)
+
                         # Dynamic Border Color
-                        border = "2px solid red" if info['status'] == "CRITICAL" else "1px solid #333"
+                        is_critical = (info['status'] == "CRITICAL") or (risk_color == "RED")
+                        border = "2px solid red" if is_critical else "1px solid #333"
+
                         
                         # HTML Card for better data density
                         st.markdown(f"""
-                        <div style="border: {border}; padding: 5px; border-radius: 5px; margin-bottom: 10px;">
-                            <strong>{bed_id}</strong><br>
-                            ❤️Hart rate {info['hr']} bpm | 💨sp02 {info.get('spo2', 98)}%
+                        <div style="border:{border}; padding:6px; border-radius:6px; margin-bottom:6px;">
+                                <strong>{bed_id}</strong><br>
+                            ❤️ HR: {hr} bpm<br>
+                            💨 SpO₂: {spo2}%<br>
+                            🧠 NEWS: <b style="color:{risk_color};">{risk_label}</b>
                         </div>
                         """, unsafe_allow_html=True)
                         
                         # Fluid Bar
-                        st.progress(int(info['fluid']))
+                        st.progress(int(info['fluid',0]))
                     
     time.sleep(0.5)
+    st.experimental_rerun()
