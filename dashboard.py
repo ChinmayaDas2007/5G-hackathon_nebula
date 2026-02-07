@@ -131,4 +131,3 @@ with placeholder.container():
 # CONTROLLED REFRESH (STREAMLIT-SAFE)
 # -------------------------------------------------
 time.sleep(0.5)
-st.experimental_rerun()
