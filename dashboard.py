@@ -3,8 +3,6 @@ import paho.mqtt.client as mqtt
 import json
 import time
 import queue
-
-# Importing the ews logic
 from ews_logic import calculate_news, get_risk_level
 
 # -------------------------------------------------
@@ -23,7 +21,7 @@ def get_mailbox():
 mailbox = get_mailbox()
 
 # -------------------------------------------------
-# MQTT CALLBACK
+# MQTT SETUP
 # -------------------------------------------------
 def on_message(client, userdata, msg):
     try:
@@ -31,20 +29,16 @@ def on_message(client, userdata, msg):
     except:
         pass
 
-# -------------------------------------------------
-# MQTT START
-# -------------------------------------------------
 @st.cache_resource
 def start_mqtt():
     try:
-        # Use a unique ID to avoid conflict with God Mode
-        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, "Nebula_Dash_Viewer_Main")
+        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, "Nebula_Dash_Viewer_Final_v2")
         client.on_message = on_message
         client.connect("broker.hivemq.com", 1883, 60)
         client.subscribe("nebula/ward1/bed/#")
         client.loop_start()
         return client
-    except Exception as e:
+    except:
         return None
 
 client = start_mqtt()
@@ -55,202 +49,146 @@ client = start_mqtt()
 if "data" not in st.session_state:
     st.session_state.data = {}
 
-placeholder = st.empty()
+# --- PLACEHOLDERS (CRITICAL FIX) ---
+# We create these OUTSIDE the loop so they stay fixed
+main_placeholder = st.empty()
+sidebar_placeholder = st.sidebar.empty()
 
 # -------------------------------------------------
-# MAIN LOOP (THE FIX IS HERE)
+# MAIN INFINITE LOOP
 # -------------------------------------------------
 while True:
-    # 1. PROCESS ALL NEW MESSAGES
+    # 1. DRAIN THE MAILBOX (Update Data)
     while not mailbox.empty():
         try:
             payload = json.loads(mailbox.get())
             bed_id = payload["id"]
+            
+            # PARSE BP STRING IMMEDIATELY
+            if "bp" in payload and isinstance(payload["bp"], str):
+                try:
+                    payload["sys_bp"] = int(payload["bp"].split("/")[0])
+                except:
+                    payload["sys_bp"] = 120
+            else:
+                payload["sys_bp"] = 120
+
             st.session_state.data[bed_id] = payload
         except:
             pass
 
-# -------------------------------------------------
-# DASHBOARD UI
-# -------------------------------------------------
-with placeholder.container():
-
-    # ---------------- STATS ----------------
-    critical_count = sum(
-        1 for b in st.session_state.data.values()
-        if b.get("status") == "CRITICAL"
-    )
-
-    high_risk_count = sum(
-        1 for b in st.session_state.data.values()
-        if get_risk_level(
-            calculate_news(
-                b.get("hr", 0),
-                b.get("spo2", 98),
-                b.get("sys_bp", 120),
-                b.get("temp", 37.0)
+    # 2. RENDER SIDEBAR (Using the Fixed Placeholder)
+    with sidebar_placeholder.container():
+        st.title("🚨 CRITICAL PATIENTS")
+        
+        # Filter for Critical or High Risk (Red)
+        critical_beds = []
+        for bid, info in st.session_state.data.items():
+            # Check Status
+            if info.get("status") == "CRITICAL":
+                critical_beds.append((bid, info))
+                continue
+            
+            # Check NEWS Score (Red Risk)
+            news = calculate_news(
+                info.get("hr", 0), info.get("spo2", 98), 
+                info.get("sys_bp", 120), info.get("temp", 37.0)
             )
-        )[0] == "RED"
-    )
+            if get_risk_level(news)[0] == "RED":
+                critical_beds.append((bid, info))
 
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Active Nodes", f"{len(st.session_state.data)}/50")
-    c2.metric("CRITICAL ALERTS", critical_count)
-    c3.metric("HIGH RISK (NEWS)", high_risk_count)
-    
-    st.markdown("---")
-<<<<<<< HEAD
-    
-    # ---------------- SIDEBAR: CRITICAL ALERTS ----------------
-    st.sidebar.title("🚨 CRITICAL PATIENTS")
+        if not critical_beds:
+            st.success("All Patients Stable")
+        else:
+            for bed_id, info in critical_beds:
+                hr = info.get("hr", 0)
+                spo2 = info.get("spo2", 98)
+                st.markdown(f"""
+                <div style="border:2px solid red; background:#330000; padding:10px; border-radius:8px; margin-bottom:8px;">
+                    <strong>{bed_id}</strong><br>
+                    ❤️ HR: {hr} | 💨 SpO₂: {spo2}%<br>
+                    <b style="color:red">⚠️ ACTION REQUIRED</b>
+                </div>
+                """, unsafe_allow_html=True)
 
-    critical_beds = {
-        bid: info for bid, info in st.session_state.data.items()
-        if info.get("status") == "CRITICAL"
-    }
+    # 3. RENDER MAIN UI (Using the Fixed Placeholder)
+    with main_placeholder.container():
+        
+        # --- CALCULATE STATS ---
+        critical_count = len(critical_beds)
+        
+        high_risk_count = sum(
+            1 for b in st.session_state.data.values()
+            if get_risk_level(calculate_news(
+                b.get("hr", 0), b.get("spo2", 98), b.get("sys_bp", 120), b.get("temp", 37.0)
+            ))[0] == "RED"
+        )
 
-    if not critical_beds:
-        st.sidebar.success("No critical patients")
-    else:
-        for bed_id, info in critical_beds.items():
-            hr = info.get("hr", 0)
-            spo2 = info.get("spo2", 98)
+        # --- TOP METRICS ---
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Active Nodes", f"{len(st.session_state.data)}/50")
+        c2.metric("CRITICAL ALERTS", critical_count)
+        c3.metric("HIGH RISK (NEWS)", high_risk_count)
+        
+        st.markdown("---")
 
-            st.sidebar.markdown(f"""
-            <div style="
-                border:2px solid red;
-                background:#330000;
-                padding:10px;
-                border-radius:8px;
-                margin-bottom:8px;
-            ">
-                <strong>{bed_id}</strong><br>
-                ❤️ HR: {hr} bpm<br>
-                💨 SpO₂: {spo2}%<br>
-                ⚠️ CRITICAL
-            </div>
-            """, unsafe_allow_html=True)
-    
-   
-=======
->>>>>>> 7d33bb9697118ba17e19c356f06af8aa657e9c33
-
-    # ---------------- BED GRID ----------------
-    cols = st.columns(5)
-    sorted_beds = sorted(st.session_state.data.items())
+        # --- MAIN BED GRID ---
+        cols = st.columns(5)
+        sorted_beds = sorted(st.session_state.data.items())
 
         for i, (bed_id, info) in enumerate(sorted_beds):
             with cols[i % 5]:
-                # --- PARSE DATA ---
-                bp_str = info.get("bp", "120/80")
-                try:
-                    sys_bp = int(bp_str.split("/")[0])
-                    dia_bp = int(bp_str.split("/")[1])
-                except:
-                    sys_bp, dia_bp = 120, 80
-
+                # Safe Data Extraction
                 hr = info.get("hr", 0)
                 spo2 = info.get("spo2", 98)
+                sys_bp = info.get("sys_bp", 120)
                 temp = info.get("temp", 37.0)
-                fluid = int(info.get("fluid", 50))
+                fluid = int(info.get("fluid", 0))
                 status = info.get("status", "NORMAL")
-
-                # --- CALCULATE NEWS SCORE ---
+                
+                # Logic
                 news_score = calculate_news(hr, spo2, sys_bp, temp)
                 risk_color, risk_label = get_risk_level(news_score)
 
-<<<<<<< HEAD
-            # ---- COLOR LOGIC ----
-            hr_color = "red" if hr > 130 or hr < 50 else "lime"
-            spo2_color = "red" if spo2 < 90 else "lime"
+                hr_color = "red" if (hr > 130 or hr < 50) else "#00ff00"
+                spo2_color = "red" if spo2 < 90 else "#00ff00"
+                badge_color = "red" if status == "CRITICAL" else "#2ecc71"
+                
+                # Check timestamps
+                try:
+                    ts = info.get("timestamp", time.time())
+                    last_seen = int(time.time() - float(ts))
+                except:
+                    last_seen = 0
 
-            status = info.get("status", "NORMAL")
-            badge_color = "red" if status == "CRITICAL" else "#2ecc71"
-            
-            last_seen = int(time.time() - info.get("timestamp", time.time()))
-            # ---- ALERT LOGIC ----
-            is_critical = (info.get("status") == "CRITICAL") or (risk_color == "RED")
-            border = "2px solid red" if is_critical else "1px solid #444"
-            
-            
+                # Alert Borders
+                is_critical = (status == "CRITICAL") or (risk_color == "RED")
+                border = "2px solid red" if is_critical else "1px solid #444"
+                bg = "#220000" if is_critical else "#0e1117"
 
-            # ---- BED CARD ----
-            st.markdown(f"""
-            <div style="border:{border}; padding:10px; border-radius:8px; margin-bottom:6px;">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <strong>{bed_id}</strong>
-                    <span style="
-                        background:{badge_color};
-                        color:white;
-                        padding:2px 6px;
-                        border-radius:4px;
-                        font-size:12px;
-                    ">
-                        {status}
-                    </span>
-                </div>
-                <br>
-                ❤️ HR: <span style="color:{hr_color}; font-weight:bold;">{hr} bpm</span><br>
-                💨 SpO₂: <span style="color:{spo2_color}; font-weight:bold;">{spo2}%</span><br>
-                🧠 NEWS: <b style="color:{risk_color};">{risk_label}</b><br>
-                🕒 Updated: {last_seen}s ago
-            </div>
-            """, unsafe_allow_html=True)
-=======
-                # --- DETERMINE COLORS ---
-                # Priority: CRITICAL Status > RED Risk > ORANGE Risk
-                if status == "CRITICAL" or risk_color == "RED":
-                    border_color = "red"
-                    bg_color = "#440000" # Deep Red
-                    display_status = "CRITICAL"
-                elif status == "SEPSIS" or risk_color == "ORANGE":
-                    border_color = "orange"
-                    bg_color = "#442200" # Deep Orange
-                    display_status = "WARNING"
-                else:
-                    border_color = "#333"
-                    bg_color = "#0E1117" # Default Black
-                    display_status = "STABLE"
-
-                # --- RENDER CARD ---
+                # Render Card
                 st.markdown(f"""
-                <div style="
-                    border: 2px solid {border_color}; 
-                    background-color: {bg_color};
-                    padding: 10px; 
-                    border-radius: 8px; 
-                    margin-bottom: 10px;">
-                    <div style="display:flex; justify-content:space-between;">
+                <div style="border:{border}; background-color:{bg}; padding:10px; border-radius:8px; margin-bottom:6px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
                         <strong>{bed_id}</strong>
-                        <span style="color:{border_color}; font-weight:bold">{display_status}</span>
+                        <span style="background:{badge_color}; color:white; padding:2px 6px; border-radius:4px; font-size:12px;">
+                            {status}
+                        </span>
                     </div>
-                    <hr style="margin: 5px 0; border-color: #555;">
-                    <div style="font-size: 0.9rem; line-height: 1.4;">
-                        ❤️ <b>HR:</b> {hr} <br>
-                        💨 <b>SpO2:</b> {spo2}% <br>
-                        🩸 <b>BP:</b> {sys_bp}/{dia_bp} <br>
-                        🌡️ <b>Temp:</b> {temp}°C
+                    <div style="margin-top:5px; font-size:0.9em;">
+                        ❤️ <span style="color:{hr_color}; font-weight:bold;">{hr}</span>
+                        💨 <span style="color:{spo2_color}; font-weight:bold;">{spo2}%</span>
                     </div>
-                    <div style="margin-top:8px; padding:4px; background-color:{risk_color if risk_color != 'GREEN' else '#222'}; color:{'black' if risk_color!='GREEN' else 'white'}; text-align:center; border-radius:4px; font-weight:bold; font-size: 0.8rem;">
-                        {risk_label}
+                    <div style="font-size:0.8em; color:#aaa;">
+                         NEWS: <b style="color:{risk_color};">{risk_label}</b>
+                    </div>
+                    <div style="font-size:0.7em; color:#666; margin-top:4px;">
+                        🕒 {last_seen}s ago
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
->>>>>>> 7d33bb9697118ba17e19c356f06af8aa657e9c33
 
-                # Fluid Bar
-                bar_color = "red" if fluid < 15 else "#00ff00"
-                st.markdown(f"""<style>.stProgress .st-bo {{background-color: {bar_color};}}</style>""", unsafe_allow_html=True)
                 st.progress(fluid)
 
-<<<<<<< HEAD
-# -------------------------------------------------
-# CONTROLLED REFRESH (STREAMLIT-SAFE)
-# -------------------------------------------------
-time.sleep(1)
-st.experimental_rerun()
-
-=======
-    # 3. SLEEP TO PREVENT CPU MELTDOWN
+    # 4. CONTROL REFRESH RATE
     time.sleep(0.5)
->>>>>>> 7d33bb9697118ba17e19c356f06af8aa657e9c33
