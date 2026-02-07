@@ -60,7 +60,6 @@ while True:
             payload = json.loads(mailbox.get())
             bed_id = payload["id"]
 
-            # Parse systolic BP
             if "bp" in payload and isinstance(payload["bp"], str):
                 try:
                     payload["sys_bp"] = int(payload["bp"].split("/")[0])
@@ -73,11 +72,11 @@ while True:
         except:
             pass
 
-    # ---------------- SIDEBAR: CRITICAL PATIENTS (FIXED) ----------------
+    # ---------------- SIDEBAR: CRITICAL PATIENTS ----------------
     with sidebar_placeholder.container():
         st.header("🚨 Live Critical Alerts")
 
-        # 🔥 FIX: DICT instead of LIST (NO DUPLICATES)
+        # 🔥 Dict = no duplicates
         critical_beds = {}
 
         for bid, info in st.session_state.data.items():
@@ -90,7 +89,7 @@ while True:
             risk_color, _ = get_risk_level(news)
 
             if info.get("status") == "CRITICAL" or risk_color == "RED":
-                critical_beds[bid] = info   # overwrite, no duplicate
+                critical_beds[bid] = info
 
         if not critical_beds:
             st.success("All Patients Stable")
@@ -98,8 +97,8 @@ while True:
             st.markdown(f"**Total Critical: {len(critical_beds)}**")
             for bed_id, info in critical_beds.items():
                 st.markdown(f"""
-                <div style="border:2px solid red; background:#330000; padding:10px;
-                            border-radius:8px; margin-bottom:8px;">
+                <div style="border:2px solid red; background:#330000;
+                            padding:10px; border-radius:8px; margin-bottom:8px;">
                     <strong>{bed_id}</strong><br>
                     ❤️ HR: {info.get("hr", 0)}<br>
                     💨 SpO₂: {info.get("spo2", 98)}%<br>
@@ -110,15 +109,30 @@ while True:
     # ---------------- MAIN DASHBOARD ----------------
     with main_placeholder.container():
 
-        critical_count = len(critical_beds)
+        # ✅ FIXED COUNT (fresh calculation, SAME logic)
+        critical_count = sum(
+            1 for info in st.session_state.data.values()
+            if (
+                info.get("status") == "CRITICAL" or
+                get_risk_level(
+                    calculate_news(
+                        info.get("hr", 0),
+                        info.get("spo2", 98),
+                        info.get("sys_bp", 120),
+                        info.get("temp", 37.0)
+                    )
+                )[0] == "RED"
+            )
+        )
+
         high_risk_count = sum(
-            1 for b in st.session_state.data.values()
+            1 for info in st.session_state.data.values()
             if get_risk_level(
                 calculate_news(
-                    b.get("hr", 0),
-                    b.get("spo2", 98),
-                    b.get("sys_bp", 120),
-                    b.get("temp", 37.0)
+                    info.get("hr", 0),
+                    info.get("spo2", 98),
+                    info.get("sys_bp", 120),
+                    info.get("temp", 37.0)
                 )
             )[0] == "RED"
         )
