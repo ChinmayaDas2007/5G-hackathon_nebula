@@ -3,181 +3,132 @@ import paho.mqtt.client as mqtt
 import json
 import time
 import queue
+
 from severity import calculate_news, get_risk_level
 
-
-# --- PAGE CONFIG ---
+# -------------------------------------------------
+# PAGE CONFIG
+# -------------------------------------------------
 st.set_page_config(page_title="Project Nebula", layout="wide")
 st.title("🏥 PROJECT NEBULA: 5G SMART WARD")
 
-# --- STEP 1: THREAD-SAFE GLOBAL MAILBOX ---
-# This creates a "Mailbox" that exists outside the session, safe for threads.
+# -------------------------------------------------
+# THREAD-SAFE MAILBOX (MQTT → STREAMLIT)
+# -------------------------------------------------
 @st.cache_resource
 def get_mailbox():
     return queue.Queue()
 
 mailbox = get_mailbox()
 
-# --- STEP 2: MQTT CALLBACK ---
+# -------------------------------------------------
+# MQTT CALLBACK
+# -------------------------------------------------
 def on_message(client, userdata, msg):
     try:
         mailbox.put(msg.payload.decode())
     except:
         pass
 
-# --- STEP 3: START MQTT ---
+# -------------------------------------------------
+# MQTT START (RUNS ONLY ONCE)
+# -------------------------------------------------
 @st.cache_resource
 def start_mqtt():
-    try:
-        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, "Nebula_Dash_Viewer")
-        client.on_message = on_message
-        client.connect("broker.hivemq.com", 1883, 60)
-        client.subscribe("nebula/ward1/bed/#")
-        client.loop_start()
-        return client
-    except Exception as e:
-        return None
+    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, "Nebula_Dashboard")
+    client.on_message = on_message
+    client.connect("broker.hivemq.com", 1883, 60)
+    client.subscribe("nebula/ward1/bed/#")
+    client.loop_start()
+    return client
 
 client = start_mqtt()
 
-# --- MAIN DASHBOARD LOOP ---
-if 'data' not in st.session_state:
-    st.session_state.data = {} 
-
-if client is None:
-    st.error("❌ Connection Failed. Check WiFi/Hotspot.")
+# -------------------------------------------------
+# SESSION STATE
+# -------------------------------------------------
+if "data" not in st.session_state:
+    st.session_state.data = {}
 
 placeholder = st.empty()
 
-<<<<<<< HEAD
-if True:
-    # Process all messages in the mailbox
-=======
-while True:
-    # 1. Process Mailbox
->>>>>>> 2015bb9ebbaf671a2382eb2906f91f6bf16a63ab
-    while not mailbox.empty():
-        try:
-            payload_str = mailbox.get()
-            payload = json.loads(payload_str)
-            bed_id = payload['id']
-            st.session_state.data[bed_id] = payload
-        except:
-            pass
+# -------------------------------------------------
+# PROCESS MQTT MESSAGES
+# -------------------------------------------------
+while not mailbox.empty():
+    try:
+        payload = json.loads(mailbox.get())
+        bed_id = payload["id"]
+        st.session_state.data[bed_id] = payload
+    except:
+        pass
 
-    # 2. Render Grid
-    with placeholder.container():
-        # Stats
-<<<<<<< HEAD
-        critical_count = sum(1 for b in st.session_state.data.values() if b['status'] == "CRITICAL")
+# -------------------------------------------------
+# DASHBOARD UI
+# -------------------------------------------------
+with placeholder.container():
 
-        high_risk_count = sum(
-            1 for b in st.session_state.data.values()
-            if get_risk_level(
-                calculate_news(
-                    b.get('hr', 0),
-                    b.get('spo2', 98),
-                    b.get('sys_bp', 120),
-                    b.get('temp', 37.0)
-                )
-            )[0] == "RED"
-        )
+    # ---------------- STATS ----------------
+    critical_count = sum(
+        1 for b in st.session_state.data.values()
+        if b.get("status") == "CRITICAL"
+    )
 
-        
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Active Nodes", f"{len(st.session_state.data)}/50")
-        c2.metric("CRITICAL ALERTS", f"{critical_count}")
-        c3.metric("HIGH RISK (NEWS)", f"{high_risk_count}")
+    high_risk_count = sum(
+        1 for b in st.session_state.data.values()
+        if get_risk_level(
+            calculate_news(
+                b.get("hr", 0),
+                b.get("spo2", 98),
+                b.get("sys_bp", 120),
+                b.get("temp", 37.0)
+            )
+        )[0] == "RED"
+    )
 
-=======
-        critical_count = sum(1 for b in st.session_state.data.values() if b.get('triage') == "RED")
-        warning_count = sum(1 for b in st.session_state.data.values() if b.get('triage') == "ORANGE")
-        
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Active Nodes", f"{len(st.session_state.data)}/50")
-        c2.metric("CRITICAL ALERTS", f"{critical_count}", delta_color="inverse")
-        c3.metric("WARNINGS", f"{warning_count}", delta_color="off")
-        
->>>>>>> 2015bb9ebbaf671a2382eb2906f91f6bf16a63ab
-        st.markdown("---")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Active Nodes", f"{len(st.session_state.data)}/50")
+    c2.metric("CRITICAL ALERTS", critical_count)
+    c3.metric("HIGH RISK (NEWS)", high_risk_count)
 
-        # The Bed Grid
-        cols = st.columns(5)
-        sorted_beds = sorted(st.session_state.data.items())
-        
-        for index, (bed_id, info) in enumerate(sorted_beds):
-<<<<<<< HEAD
-                    with cols[index % 5]:
-                        # --- SEVERITY / NEWS CALCULATION ---
-                        hr = info.get('hr', 0)
-                        spo2 = info.get('spo2', 98)
+    st.markdown("---")
 
-                        # These may not exist yet, so we use safe defaults
-                        sys_bp = info.get('sys_bp', 120)
-                        temp = info.get('temp', 37.0)
+    # ---------------- BED GRID ----------------
+    cols = st.columns(5)
+    sorted_beds = sorted(st.session_state.data.items())
 
-                        news_score = calculate_news(hr, spo2, sys_bp, temp)
-                        risk_color, risk_label = get_risk_level(news_score)
+    for i, (bed_id, info) in enumerate(sorted_beds):
+        with cols[i % 5]:
 
-                        # Dynamic Border Color
-                        is_critical = (info['status'] == "CRITICAL") or (risk_color == "RED")
-                        border = "2px solid red" if is_critical else "1px solid #333"
+            # ---- SAFE DATA ----
+            hr = info.get("hr", 0)
+            spo2 = info.get("spo2", 98)
+            sys_bp = info.get("sys_bp", 120)
+            temp = info.get("temp", 37.0)
+            fluid = int(info.get("fluid", 0))
 
-                        
-                        # HTML Card for better data density
-                        st.markdown(f"""
-                        <div style="border:{border}; padding:6px; border-radius:6px; margin-bottom:6px;">
-                                <strong>{bed_id}</strong><br>
-                            ❤️ HR: {hr} bpm<br>
-                            💨 SpO₂: {spo2}%<br>
-                            🧠 NEWS: <b style="color:{risk_color};">{risk_label}</b>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        # Fluid Bar
-                        st.progress(int(info['fluid',0]))
-=======
-            with cols[index % 5]:
-                # Get Data (Safe Defaults)
-                triage = info.get('triage', 'GREEN')
-                msg = info.get('msg', 'Stable')
-                bp = info.get('bp', '120/80')
-                temp = info.get('temp', 37.0)
-                spo2 = info.get('spo2', 99)
-                hr = info['hr']
+            # ---- NEWS SCORE ----
+            news_score = calculate_news(hr, spo2, sys_bp, temp)
+            risk_color, risk_label = get_risk_level(news_score)
 
-                # Dynamic Colors for CSS
-                bg_color = "#0E1117" # Default Dark
-                border_color = "#333"
-                text_color = "#eee"
+            # ---- ALERT LOGIC ----
+            is_critical = (info.get("status") == "CRITICAL") or (risk_color == "RED")
+            border = "2px solid red" if is_critical else "1px solid #444"
 
-                if triage == "RED":
-                    bg_color = "#440000" # Dark Red Background
-                    border_color = "#ff0000"
-                    text_color = "#ffcccc"
-                elif triage == "ORANGE":
-                    bg_color = "#443300" # Dark Orange/Brown
-                    border_color = "#ffaa00"
-                    text_color = "#ffddaa"
+            # ---- BED CARD ----
+            st.markdown(f"""
+            <div style="border:{border}; padding:8px; border-radius:6px; margin-bottom:6px;">
+                <strong>{bed_id}</strong><br>
+                ❤️ HR: {hr} bpm<br>
+                💨 SpO₂: {spo2}%<br>
+                🧠 NEWS: <b style="color:{risk_color};">{risk_label}</b>
+            </div>
+            """, unsafe_allow_html=True)
 
-                # HTML Card
-                st.markdown(f"""
-                <div style="background-color: {bg_color}; border: 1px solid {border_color}; padding: 10px; border-radius: 8px; margin-bottom: 10px;">
-                    <strong style="color: white; font-size: 1.1em;">{bed_id}</strong>
-                    <div style="float: right; font-size: 0.8em; color: {border_color}; font-weight: bold;">{msg}</div>
-                    <hr style="margin: 5px 0; border-color: #444;">
-                    <div style="color: {text_color}; font-size: 0.9em;">
-                        ❤️ <b>{hr}</b> <span style="font-size:0.8em">bpm</span> &nbsp;|&nbsp; 🩸 <b>{bp}</b>
-                    </div>
-                    <div style="color: {text_color}; font-size: 0.9em;">
-                        🌡️ <b>{temp}°C</b> &nbsp;|&nbsp; 💨 <b>{spo2}%</b>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # Fluid Bar (Saline)
-                st.progress(int(info['fluid']))
->>>>>>> 2015bb9ebbaf671a2382eb2906f91f6bf16a63ab
-                    
-    time.sleep(0.5)
-    st.experimental_rerun()
+            st.progress(fluid)
+
+# -------------------------------------------------
+# CONTROLLED REFRESH (STREAMLIT-SAFE)
+# -------------------------------------------------
+time.sleep(0.5)
+st.experimental_rerun()
