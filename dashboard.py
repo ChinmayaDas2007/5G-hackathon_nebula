@@ -4,7 +4,7 @@ import json
 import time
 import queue
 
-from severity import calculate_news, get_risk_level
+from ews_logic import calculate_news, get_risk_level
 
 # -------------------------------------------------
 # PAGE CONFIG
