@@ -151,7 +151,10 @@ elif mode == "🟢 Live Monitor":
 
         # 3. Data Prep
         all_active = list(st.session_state.beds.values())
-        sorted_beds = sorted(all_active, key=lambda x: (not x['is_critical'], -x['news_score']))
+        
+        # FIX: Changed sorting to use Bed ID instead of criticality
+        sorted_beds = sorted(all_active, key=lambda x: x['id']) 
+        
         critical_beds = [b for b in all_active if b['is_critical']]
 
         # 4. Render Sidebar
