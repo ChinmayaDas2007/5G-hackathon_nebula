@@ -81,8 +81,12 @@ class PatientBed:
                 self.bp_sys = 120
                 self.bp_dia = 80
         
+        # --- FIX FOR NURSE CALL ---
+        # Explicitly overwrite status so ESP8266 detects it
         if self.nurse_call:
-            self.status = "CRITICAL"
+            self.status = "NURSE CALL"
+        elif self.status == "NURSE CALL" and not self.nurse_call:
+            self.status = "NORMAL"
 
         return self.package_data()
 
@@ -141,8 +145,6 @@ with col_main1:
     if st.button("🚨 Call Nurse" if not current_bed.nurse_call else "✅ Clear Alarm", 
                  type="primary" if not current_bed.nurse_call else "secondary"):
         current_bed.nurse_call = not current_bed.nurse_call
-        if not current_bed.nurse_call:
-            current_bed.status = "NORMAL"
         st.rerun()
 
 is_manual = st.checkbox("🛠️ Enable Manual Control", value=current_bed.manual_mode)
