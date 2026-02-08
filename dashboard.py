@@ -27,7 +27,7 @@ def on_message(client, userdata, msg):
 @st.cache_resource
 def start_mqtt():
     try:
-        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, "Nebula_Dash_v3")
+        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, "Nebula_Dash_Ultimate")
         client.on_message = on_message
         client.connect("broker.hivemq.com", 1883, 60)
         client.subscribe("nebula/ward1/bed/#")
@@ -36,6 +36,7 @@ def start_mqtt():
     except: return None
 client = start_mqtt()
 
+# --- MODE 1: DOCTOR VIEW ---
 if mode == "📋 Patient Records":
     st.subheader("📋 Patient Clinical Overview")
     records = st.session_state.patient_db.to_dict("records")
@@ -43,7 +44,6 @@ if mode == "📋 Patient Records":
     for i, p in enumerate(records):
         with cols[i % 4]:
             color = "#e74c3c" if "CRITICAL" in p['Status'] else "#2ecc71"
-            # ADDED: color: white
             st.markdown(f"""
             <div style="border:2px solid {color}; background:#0e1117; padding:15px; border-radius:10px; margin-bottom:15px; color:white;">
                 <h4>{p['Bed ID']}</h4>
@@ -52,26 +52,33 @@ if mode == "📋 Patient Records":
                 🫁 <b>RR:</b> {p['Resp. Rate']} <br>
                 💨 <b>SpO₂:</b> {p['SpO₂ (%)']}%<br>
                 🩸 <b>BP:</b> {p['Blood Pressure']}<br>
+                🌡️ <b>Temp:</b> {p['Temperature (°C)']}°C<br>
                 <hr style="border-color:#333;">
                 <b>NEWS: {p['NEWS Score']}</b> ({p['Status']})
             </div>
             """, unsafe_allow_html=True)
 
+# --- MODE 2: LIVE MONITOR ---
 elif mode == "🟢 Live Monitor":
-    sidebar_area = st.sidebar.empty()
-    grid_area = st.empty()
+    # 1. Create Placeholders ONCE
+    sidebar_placeholder = st.sidebar.empty()
+    metrics_placeholder = st.empty()
+    grid_placeholder = st.empty()
 
+    # 2. Infinite Loop (NO st.rerun)
+    # This prevents the page from "dimming" or flashing
     while True:
         now = time.time()
+        
+        # A. Process Incoming Data
         while not mailbox.empty():
             try:
                 data = json.loads(mailbox.get_nowait())
                 bid = data['id']
                 sys_bp = int(data['bp'].split('/')[0]) if 'bp' in data else 120
                 rr = int(data.get('rr', 16))
-                pulse = int(data.get('pulse', data.get('hr', 70))) # Fallback if missing
+                pulse = int(data.get('pulse', data.get('hr', 70)))
                 
-                # UPDATED: Pass PULSE to calculator
                 score = calculate_news(data['hr'], pulse, data['spo2'], sys_bp, data['temp'], rr)
                 color, label = get_risk_level(score)
                 
@@ -80,42 +87,89 @@ elif mode == "🟢 Live Monitor":
                 }
             except: continue
 
-        st.session_state.beds = {k:v for k,v in st.session_state.beds.items() if now - v.get('last',0) < 15}
-        sorted_beds = sorted(st.session_state.beds.values(), key=lambda x: x['id'])
-        critical = [b for b in sorted_beds if b['news'] >= 7 or b.get('status') == "CRITICAL"]
+        # B. Clean & Sort
+        # Mark beds as "OFFLINE" if no data for 10s, Delete if > 60s
+        current_beds = []
+        to_delete = []
+        for bid, b in st.session_state.beds.items():
+            age = now - b.get('last', 0)
+            if age > 60: to_delete.append(bid)
+            else:
+                b['is_offline'] = (age > 10)
+                b['age'] = int(age)
+                current_beds.append(b)
+        
+        for k in to_delete: del st.session_state.beds[k]
+        
+        sorted_beds = sorted(current_beds, key=lambda x: x['id'])
+        critical = [b for b in sorted_beds if not b.get('is_offline') and (b['news'] >= 7 or b.get('status') == "CRITICAL")]
 
-        with sidebar_area.container():
+        # C. Render Sidebar
+        with sidebar_placeholder.container():
+            st.header("🚨 Alerts")
             st.error(f"Critical: {len(critical)}")
             for b in critical:
-                st.markdown(f"<div style='border:1px solid red; background:#400; padding:10px; color:white;'><b>{b['id']}</b> NEWS:{b['news']}</div>", unsafe_allow_html=True)
+                st.markdown(f"""
+                <div style='border:1px solid red; background:#400; padding:10px; color:white; margin-bottom:5px; border-radius:5px;'>
+                    <b>{b['id']}</b> NEWS:{b['news']}<br>
+                    ❤️ {b['hr']} | 🫁 {b.get('rr','--')} | 💨 {b['spo2']}%
+                </div>""", unsafe_allow_html=True)
 
-        with grid_area.container():
+        # D. Render Metrics
+        with metrics_placeholder.container():
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Active Beds", len(sorted_beds))
+            c2.metric("Critical Alerts", len(critical))
+            c3.metric("System Health", "ONLINE")
+            st.divider()
+
+        # E. Render Grid
+        with grid_placeholder.container():
             cols = st.columns(4)
             for i, b in enumerate(sorted_beds):
                 with cols[i % 4]:
+                    # OFFLINE STATE
+                    if b.get('is_offline'):
+                        st.markdown(f"""
+                        <div style="border:1px dashed #444; background:#1e1e1e; padding:15px; border-radius:10px; margin-bottom:10px; opacity:0.6;">
+                            <h4 style="color:#888;">{b['id']}</h4>
+                            <h3 style="color:#aaa;">📶 OFFLINE</h3>
+                            <p style="color:#666; font-size:0.8em;">Last seen {b['age']}s ago</p>
+                        </div>""", unsafe_allow_html=True)
+                        continue
+
+                    # NORMAL STATE
                     border = "2px solid red" if b['news'] >= 7 else "1px solid #444"
                     bg = "#2b0000" if b['news'] >= 7 else "#0e1117"
                     fluid = int(b.get('fluid', 0))
                     
-                    # ADDED: Color: White to main div
+                    # Error Handling for Sensors (-1 values)
+                    def fmt(val, unit):
+                        return f"{val} <span style='color:#aaa; font-size:0.8em'>{unit}</span>" if val != -1 else "<span style='color:yellow'>⚠️ ERR</span>"
+
                     st.markdown(f"""
                     <div style="border:{border}; background:{bg}; padding:15px; border-radius:10px; margin-bottom:10px; color:white;">
                         <div style="display:flex; justify-content:space-between;">
                             <h4>{b['id']}</h4>
                             <b style="color:{b['color']}">{b['label']}</b>
                         </div>
-                        <hr style="opacity:0.2;">
-                        ♥️ <b>HR: {b['hr']}</b> <br>
-                        💓 <b>Pulse: {b.get('pulse','--')}</b> <br>
-                        🫁 <b>RR: {b.get('rr','--')}</b> <br>
-                        💨 <b>SpO2:</b> {b['spo2']}% | 🩸 <b>BP:</b> {b.get('bp','--')}<br>
+                        <hr style="opacity:0.2; margin:8px 0;">
+                        ⚡ <b>HR:</b> {fmt(b['hr'], 'bpm')} <br>
+                        💓 <b>Pulse:</b> {fmt(b.get('pulse', -1), 'bpm')} <br>
+                        🫁 <b>RR:</b> {fmt(b.get('rr', -1), '/min')} <br>
+                        💨 <b>SpO2:</b> {fmt(b['spo2'], '%')} <br>
+                        🩸 <b>BP:</b> {b.get('bp','--')} <br>
+                        🌡️ <b>Temp:</b> {b['temp']}°C <br>
                         <br>
                         💧 Saline: {fluid}%
-                        <div style="width:100%; background:#333; height:5px; margin-top:5px;">
-                            <div style="width:{fluid}%; background:#00bcd4; height:5px;"></div>
+                        <div style="width:100%; background:#333; height:5px; margin-top:5px; border-radius:2px;">
+                            <div style="width:{fluid}%; background:#00bcd4; height:5px; border-radius:2px;"></div>
+                        </div>
+                        <div style="margin-top:8px; font-size:0.7em; color:#666; text-align:right;">
+                            🕒 Updated: {b['age']}s ago
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
 
+        # 3. Sleep (Control Refresh Rate)
         time.sleep(1)
-        st.rerun()
